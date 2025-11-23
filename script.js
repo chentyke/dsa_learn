@@ -597,10 +597,27 @@ function generateArray() {
         svg.style.left = "0";
         svg.style.pointerEvents = "none";
         // SVG should be visible if BST is active, but we'll handle display in updateAlgorithmInfo/reset
-        // actually let's just default it to hidden and let updateAlgorithmInfo toggle it
-        svg.style.display = "none";
         visualizerContainer.appendChild(svg);
         treeSvg = svg; // Update global ref
+    }
+
+    // Create bars container if it doesn't exist
+    let barsContainer = document.getElementById('bars-container');
+    if (!barsContainer) {
+        barsContainer = document.createElement('div');
+        barsContainer.id = 'bars-container';
+        visualizerContainer.appendChild(barsContainer);
+    }
+    barsContainer.innerHTML = ''; // Clear bars
+
+    // Create scrollable content wrapper if it doesn't exist
+    let scrollableContent = document.getElementById('scrollable-content');
+    if (!scrollableContent) {
+        scrollableContent = document.createElement('div');
+        scrollableContent.id = 'scrollable-content';
+        scrollableContent.classList.add('scrollable-content');
+        scrollableContent.style.display = 'none'; // Hidden by default
+        visualizerContainer.appendChild(scrollableContent);
     }
 
     // In BST mode, we might want to clear the tree nodes if we are regenerating the array
@@ -624,7 +641,13 @@ function generateArray() {
         label.innerText = value;
         bar.appendChild(label);
 
-        visualizerContainer.appendChild(bar);
+        barsContainer.appendChild(bar);
+
+        // Add drag listeners
+        bar.addEventListener('mousedown', (e) => {
+            if (isPlaying) return; // Disable drag while sorting
+            startDrag(e, i);
+        });
     }
 
     // Ensure SVG is on top or bottom? 
@@ -677,14 +700,59 @@ function updateAlgorithmInfo() {
     }
 
     // Handle view switching
+    // Handle view switching
+    const scrollableContent = document.getElementById('scrollable-content');
+    const barsContainer = document.getElementById('bars-container');
+
     if (algoKey === 'bst') {
-        // Don't hide bars for BST anymore
-        document.querySelectorAll('.bar').forEach(b => b.style.display = 'block');
-        if (treeSvg) treeSvg.style.display = 'block';
+        // Enable scrollable container for the tree part
+        visualizerContainer.classList.add('scrollable-container');
+        visualizerContainer.style.flexDirection = 'column';
+
+        // Show bars but make them smaller/fixed
+        if (barsContainer) {
+            barsContainer.style.height = '150px';
+            barsContainer.style.flex = 'none';
+            barsContainer.style.borderBottom = '4px solid var(--border-color)';
+            barsContainer.style.display = 'flex';
+        }
+
+        // Show tree SVG and move it into scrollable content
+        if (treeSvg) {
+            treeSvg.style.display = 'block';
+            scrollableContent.appendChild(treeSvg);
+        }
+
+        scrollableContent.style.display = 'block';
+        scrollableContent.style.flex = '1';
+
         clearTree();
+
+        // Scroll to center
+        setTimeout(() => {
+            scrollableContent.scrollLeft = (3000 - scrollableContent.clientWidth) / 2;
+        }, 100);
+
     } else {
-        document.querySelectorAll('.bar').forEach(b => b.style.display = 'block');
-        if (treeSvg) treeSvg.style.display = 'none';
+        // Disable scrollable container
+        visualizerContainer.classList.remove('scrollable-container');
+        visualizerContainer.style.flexDirection = 'row'; // Default
+
+        // Reset bars container
+        if (barsContainer) {
+            barsContainer.style.height = '100%';
+            barsContainer.style.flex = '1';
+            barsContainer.style.borderBottom = 'none';
+            barsContainer.style.display = 'flex';
+        }
+
+        // Hide tree SVG and move it back (optional, but keeps DOM clean)
+        if (treeSvg) {
+            treeSvg.style.display = 'none';
+            visualizerContainer.appendChild(treeSvg);
+        }
+
+        if (scrollableContent) scrollableContent.style.display = 'none';
     }
 }
 
@@ -841,9 +909,10 @@ function handleAction(action) {
             bar1.querySelector('.bar-label').innerText = l2;
             bar2.querySelector('.bar-label').innerText = l1;
 
-            // Update internal array state for consistency (though generator has its own copy, 
-            // we need to keep `array` global var in sync if we want to support "reset to current state" later, 
-            // but for now generator drives everything)
+            // Update internal array state for consistency
+            const temp = array[i];
+            array[i] = array[j];
+            array[j] = temp;
         }
     } else if (action.type === 'sorted') {
         const bar = document.getElementById(`bar-${action.index}`);
@@ -855,6 +924,9 @@ function handleAction(action) {
             bar.style.height = `${action.value * 5}px`;
             bar.querySelector('.bar-label').innerText = action.value;
             bar.classList.add('swap'); // Flash red to show change
+
+            // Update internal array
+            array[action.index] = action.value;
         }
     } else if (action.type === 'tree-insert') {
         drawNode(action.node, action.parent);
@@ -879,32 +951,29 @@ function clearTree() {
 
 function drawNode(node, parent) {
     // Calculate position
-    // We use percentage for X to be responsive, and fixed px for Y
-    // Root is at 50%, 50px
-    // Children spread out based on level
-    // Improved logic: use a width that halves every level
-
-    // Initial spread width (percentage of container)
-    const initialSpread = 50;
+    // Use fixed large width logic
+    const VIRTUAL_WIDTH = 3000;
+    const initialSpread = VIRTUAL_WIDTH / 4; // Spread from center
 
     // If root
     if (!parent) {
-        node.visualX = 50; // Center
+        node.visualX = VIRTUAL_WIDTH / 2; // Center of 3000px
         node.visualY = 40;
     } else {
         // Determine direction
         const isLeft = node.val < parent.val;
-        // Calculate offset based on level. Level 0 is root.
-        // Level 1 offset = 25, Level 2 = 12.5, etc.
+        // Calculate offset based on level. 
         const level = node.level;
-        const offset = initialSpread / Math.pow(2, level);
+        // Level 0 (root) -> children at +/- initialSpread (750px)
+        // Level 1 -> children at +/- initialSpread / 2 (375px)
+        const offset = initialSpread / Math.pow(2, level - 1); // level starts at 1 for children
 
         node.visualX = parent.visualX + (isLeft ? -offset : offset);
         node.visualY = parent.visualY + 60; // Fixed vertical spacing
     }
 
-    const containerWidth = visualizerContainer.clientWidth;
-    const xPos = (node.visualX / 100) * containerWidth;
+    // xPos is absolute in the scrollable content
+    const xPos = node.visualX;
     const yPos = node.visualY;
 
     const nodeEl = document.createElement('div');
@@ -916,14 +985,17 @@ function drawNode(node, parent) {
 
     // Animate entrance
     nodeEl.style.transform = 'scale(0)';
-    visualizerContainer.appendChild(nodeEl);
+
+    // Append to scrollable content
+    const scrollableContent = document.getElementById('scrollable-content');
+    scrollableContent.appendChild(nodeEl);
 
     // Trigger reflow
     nodeEl.offsetHeight;
     nodeEl.style.transform = 'scale(1)';
 
     if (parent) {
-        const parentX = (parent.visualX / 100) * containerWidth;
+        const parentX = parent.visualX;
         const parentY = parent.visualY;
 
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -975,10 +1047,27 @@ document.addEventListener('mousemove', (e) => {
         if (newWidth > 200 && newWidth < containerRect.width - 200) {
             // Use flex-basis for smooth resizing
             visualizationSection.style.flex = `0 0 ${newWidth}px`;
-            // The info section will take the remaining space automatically if we set it to flex: 1
-            // But currently it has flex: 1, so we just need to make sure visualizationSection doesn't grow/shrink automatically
-            // Actually, let's set both to explicit widths or flex-basis
-            // Simpler: Set flex-basis on visualizationSection, let infoSection be flex: 1
+            visualizationSection.classList.remove('collapsed');
+            infoSection.style.display = 'flex'; // Ensure it's visible
+        } else if (newWidth > containerRect.width - 150) {
+            // Auto-hide if dragged too far right (making visualization huge)
+            // Or maybe if dragged too far left? The user said "right side auto hide when dragged small"
+            // So if the remaining space for info section is small.
+            // Info section width = Total - newWidth.
+            // If (Total - newWidth) < 100 -> Hide info section
+        }
+
+        // Check if we should auto-hide the right panel
+        const remainingWidth = containerRect.width - newWidth;
+        if (remainingWidth < 150) {
+            infoSection.style.display = 'none';
+            // Make visualization take full width
+            visualizationSection.style.flex = '1';
+        } else {
+            infoSection.style.display = 'flex';
+            // If we are coming back from hidden, we need to set the flex basis again
+            // But the logic above handles the range > 200 && < total - 200
+            // We just need to ensure we don't get stuck.
         }
     }
 
@@ -1009,4 +1098,69 @@ document.addEventListener('mouseup', () => {
     }
 });
 
+initDrag();
 init();
+
+// Drag Logic
+let isDraggingBar = false;
+let draggedBarIndex = -1;
+
+function startDrag(e, index) {
+    // If a sort is in progress (paused or playing), reset it so we don't have state conflicts
+    if (sorter) {
+        reset();
+    }
+
+    isDraggingBar = true;
+    draggedBarIndex = index;
+    const bar = document.getElementById(`bar-${index}`);
+    bar.classList.add('dragging');
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+}
+
+function initDrag() {
+    document.addEventListener('mousemove', (e) => {
+        if (!isDraggingBar) return;
+
+        // Calculate new height based on mouse Y relative to container bottom
+        const containerRect = visualizerContainer.getBoundingClientRect();
+        // Y position relative to bottom of container
+        // e.clientY is viewport y. 
+        // container bottom is containerRect.bottom
+        // height = containerRect.bottom - e.clientY
+        // We need to clamp it between min and max
+
+        let newHeight = containerRect.bottom - e.clientY;
+
+        // Clamp
+        // Max height is container height - some padding
+        const maxHeight = containerRect.height - 20;
+        const minHeight = 20; // Min value 4 * 5 = 20px
+
+        if (newHeight < minHeight) newHeight = minHeight;
+        if (newHeight > maxHeight) newHeight = maxHeight;
+
+        // Convert back to value (height / 5)
+        const newValue = Math.floor(newHeight / 5);
+
+        // Update Array
+        array[draggedBarIndex] = newValue;
+
+        // Update DOM
+        const bar = document.getElementById(`bar-${draggedBarIndex}`);
+        bar.style.height = `${newValue * 5}px`;
+        bar.querySelector('.bar-label').innerText = newValue;
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isDraggingBar) {
+            isDraggingBar = false;
+            const bar = document.getElementById(`bar-${draggedBarIndex}`);
+            if (bar) bar.classList.remove('dragging');
+            draggedBarIndex = -1;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+    });
+}

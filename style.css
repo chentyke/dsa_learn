@@ -70,7 +70,8 @@ header {
     justify-content: space-between;
     align-items: center;
     border-bottom: 4px solid var(--border-color);
-    z-index: 10;
+    z-index: 1000;
+    position: relative;
 }
 
 h1 {
@@ -106,6 +107,7 @@ label {
     width: 200px;
     font-family: var(--font-pixel);
     font-size: 0.6rem;
+    z-index: 100;
 }
 
 .select-trigger {
@@ -271,27 +273,73 @@ main {
     /* Dot pattern background */
     background-image: radial-gradient(#000000 1px, transparent 1px);
     background-size: 20px 20px;
+    overflow: hidden;
+    /* Prevent expansion */
+    min-width: 0;
+    /* Flexbox fix */
 }
 
 #visualizer-container {
     flex: 1;
     display: flex;
     align-items: flex-end;
+    /* justify-content: center; */
+    /* gap: 4px; */
+    padding-bottom: 3rem;
+    width: 100%;
+    /* Ensure it fits */
+    min-width: 0;
+}
+
+#bars-container {
+    display: flex;
+    align-items: flex-end;
     justify-content: center;
     gap: 4px;
-    padding-bottom: 3rem;
+    width: 100%;
+    transition: height 0.3s;
+}
+
+.scrollable-container {
+    display: block !important;
+    /* Override flex */
+    overflow: auto;
+    position: relative;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.scrollable-content {
+    width: 3000px;
+    height: 100%;
+    position: relative;
+    margin: 0 auto;
 }
 
 .bar {
     width: 40px;
     background-color: var(--bar-default);
-    border: 2px solid var(--border-color);
+    /* Pixel Art Style Borders */
+    border-left: 4px solid rgba(255, 255, 255, 0.4);
+    border-top: 4px solid rgba(255, 255, 255, 0.4);
+    border-right: 4px solid rgba(0, 0, 0, 0.4);
     border-bottom: none;
-    /* Looks better grounded */
-    transition: height 0.2s, background-color 0.1s;
+
+    transition: height 0.1s, background-color 0.1s;
     position: relative;
-    box-shadow: 2px 0px 0px rgba(0, 0, 0, 0.2);
-    /* Slight depth */
+    box-shadow: 4px 0px 0px rgba(0, 0, 0, 0.2);
+    /* Cursor indicating interactivity */
+    cursor: ns-resize;
+}
+
+.bar:hover {
+    filter: brightness(1.1);
+}
+
+.bar.dragging {
+    background-color: var(--accent-primary) !important;
+    box-shadow: 0 0 10px var(--accent-primary);
+    z-index: 100;
 }
 
 .bar-label {
